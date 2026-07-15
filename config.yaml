@@ -1,0 +1,36 @@
+auth:
+  password: "Shiguangwu@123"
+  session_duration_hours: 12
+server:
+  host: "0.0.0.0"
+  port: 8080
+log:
+  level: "warn"
+  output: "stdout"
+mcp:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8081
+  auth_header: "X-MCP-Token"
+  auth_header_value: ""
+openai:
+  api_key: "sk-your-key-here"
+  base_url: "https://api.deepseek.com/v1"
+  model: "deepseek-chat"
+database:
+  path: "data/conversations.db"
+  knowledge_db_path: "data/knowledge.db"
+security:
+  tools_dir: "tools"
+knowledge:
+  enabled: false
+roles_dir: "roles"
+skills_dir: "skills"
+agents_dir: "agents"
+multi_agent:
+  enabled: false
+  default_mode: "eino_single"
+project:
+  enabled: true
+  fact_index_max_runes: 65000
+  fact_summary_max_runes: 24000
