@@ -26,11 +26,14 @@ jobs:
           go mod download
           GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o cyberstrike-ai cmd/server/main.go
           file cyberstrike-ai
+          ls -lh cyberstrike-ai
       
-      - name: Build Docker image
+      - name: Prepare Docker context
         run: |
           mkdir -p docker-context
           cp upstream/cyberstrike-ai docker-context/
+          # 在宿主机上加执行权限，COPY 会保留
+          chmod +x docker-context/cyberstrike-ai
           cp -r upstream/tools docker-context/
           cp -r upstream/roles docker-context/
           cp -r upstream/skills docker-context/
@@ -38,9 +41,15 @@ jobs:
           cp -r upstream/web docker-context/
           cp config.yaml docker-context/
           
+          # 验证文件存在且有执行权限
+          ls -la docker-context/cyberstrike-ai
+          
           cat > docker-context/Dockerfile << 'EOF'
           FROM python:3.12-slim-bookworm
           WORKDIR /app
+          RUN apt-get update && apt-get install -y --no-install-recommends \
+              ca-certificates curl nmap sqlmap \
+              && rm -rf /var/lib/apt/lists/*
           COPY cyberstrike-ai /app/cyberstrike-ai
           COPY tools /app/tools
           COPY roles /app/roles
@@ -48,19 +57,21 @@ jobs:
           COPY agents /app/agents
           COPY web /app/web
           COPY config.yaml /app/config.yaml
-          RUN mkdir -p /app/data /app/knowledge_base && chmod +x /app/cyberstrike-ai
+          RUN mkdir -p /app/data /app/knowledge_base
           EXPOSE 8080 8081
           VOLUME ["/app/data", "/app/knowledge_base"]
           CMD ["/app/cyberstrike-ai"]
           EOF
-          
-          docker buildx build --platform linux/arm64 -t cyberstrikeai:arm64 --load docker-context/
+      
+      - name: Build Docker image
+        run: |
+          docker buildx build --no-cache --platform linux/arm64 -t cyberstrikeai:arm64 --load docker-context/
       
       - name: Save and upload
         run: |
           docker save -o cyberstrikeai-arm64.tar cyberstrikeai:arm64
           ls -lh cyberstrikeai-arm64.tar
-          
+      
       - uses: actions/upload-artifact@v4
         with:
           name: cyberstrikeai-arm64
