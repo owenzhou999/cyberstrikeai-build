@@ -1,7 +1,8 @@
 FROM golang:1.23-bookworm AS builder
 WORKDIR /app
 RUN git clone --depth 1 https://github.com/Ed1s0nZ/CyberStrikeAI.git .
-RUN go mod download && \
+RUN go env -w GOPROXY=https://proxy.golang.org,direct && \
+    go mod download && \
     GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o cyberstrike-ai cmd/server/main.go
 
 FROM python:3.12-slim-bookworm
