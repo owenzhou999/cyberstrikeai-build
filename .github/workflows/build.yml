@@ -27,7 +27,7 @@ jobs:
           GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o cyberstrike-ai cmd/server/main.go
           file cyberstrike-ai
       
-      - name: Build Docker image with correct CMD
+      - name: Build Docker image
         run: |
           mkdir -p docker-context
           cp upstream/cyberstrike-ai docker-context/
@@ -41,9 +41,6 @@ jobs:
           cat > docker-context/Dockerfile << 'EOF'
           FROM python:3.12-slim-bookworm
           WORKDIR /app
-          RUN apt-get update && apt-get install -y --no-install-recommends \
-              ca-certificates curl nmap sqlmap \
-              && rm -rf /var/lib/apt/lists/*
           COPY cyberstrike-ai /app/cyberstrike-ai
           COPY tools /app/tools
           COPY roles /app/roles
