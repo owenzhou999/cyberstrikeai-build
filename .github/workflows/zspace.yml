@@ -1,0 +1,68 @@
+name: Build AMD64 for ZSpace
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Get upstream source
+        uses: actions/checkout@v4
+        with:
+          repository: Ed1s0nZ/CyberStrikeAI
+          path: upstream
+      
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      
+      - name: Compile AMD64 binary
+        working-directory: upstream
+        run: |
+          go env -w GOPROXY=https://proxy.golang.org,direct
+          go mod download
+          go build -o cyberstrike-ai cmd/server/main.go
+          file cyberstrike-ai
+      
+      - name: Build Docker image
+        run: |
+          mkdir -p docker-context
+          cp upstream/cyberstrike-ai docker-context/
+          cp -r upstream/tools docker-context/
+          cp -r upstream/roles docker-context/
+          cp -r upstream/skills docker-context/
+          cp -r upstream/agents docker-context/
+          cp -r upstream/web docker-context/
+          cp config.yaml docker-context/
+          
+          cat > docker-context/Dockerfile << 'EOF'
+          FROM python:3.12-slim-bookworm
+          WORKDIR /app
+          COPY cyberstrike-ai /app/cyberstrike-ai
+          COPY tools /app/tools
+          COPY roles /app/roles
+          COPY skills /app/skills
+          COPY agents /app/agents
+          COPY web /app/web
+          COPY config.yaml /app/config.yaml
+          RUN mkdir -p /app/data /app/knowledge_base && chmod +x /app/cyberstrike-ai
+          EXPOSE 8080 8081
+          VOLUME ["/app/data", "/app/knowledge_base"]
+          CMD ["/app/cyberstrike-ai"]
+          EOF
+          
+          docker build -t cyberstrikeai:amd64 docker-context/
+      
+      - name: Save and upload
+        run: |
+          docker save -o cyberstrikeai-amd64.tar cyberstrikeai:amd64
+          ls -lh cyberstrikeai-amd64.tar
+      
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cyberstrikeai-amd64
+          path: cyberstrikeai-amd64.tar
+          retention-days: 1
