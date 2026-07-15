@@ -44,6 +44,9 @@ jobs:
           cp -r upstream/web docker-context/
           cp config.yaml docker-context/
           
+          # 在宿主机（原生 x86_64）设置可执行权限，避免 QEMU 模拟 ARM64 时 exit 255
+          chmod +x docker-context/cyberstrike-ai
+          
           cat > docker-context/Dockerfile << 'EOF'
           FROM python:3.12-slim-bookworm
           WORKDIR /app
@@ -54,7 +57,7 @@ jobs:
           COPY agents /app/agents
           COPY web /app/web
           COPY config.yaml /app/config.yaml
-          RUN mkdir -p /app/data /app/knowledge_base && chmod +x /app/cyberstrike-ai
+          RUN mkdir -p /app/data /app/knowledge_base
           EXPOSE 8080 8081
           VOLUME ["/app/data", "/app/knowledge_base"]
           CMD ["/app/cyberstrike-ai"]
