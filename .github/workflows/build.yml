@@ -33,31 +33,26 @@ jobs:
           file cyberstrike-ai
           ls -lh cyberstrike-ai
       
-      - name: Build Docker image
+      - name: Build Docker image (zero RUN, avoids QEMU exit 255)
         run: |
-          mkdir -p docker-context
-          cp upstream/cyberstrike-ai docker-context/
-          cp -r upstream/tools docker-context/
-          cp -r upstream/roles docker-context/
-          cp -r upstream/skills docker-context/
-          cp -r upstream/agents docker-context/
-          cp -r upstream/web docker-context/
-          cp config.yaml docker-context/
+          # 在宿主机（原生 x86_64）准备所有文件和目录
+          mkdir -p docker-context/app/data
+          mkdir -p docker-context/app/knowledge_base
+          cp upstream/cyberstrike-ai docker-context/app/
+          cp -r upstream/tools docker-context/app/
+          cp -r upstream/roles docker-context/app/
+          cp -r upstream/skills docker-context/app/
+          cp -r upstream/agents docker-context/app/
+          cp -r upstream/web docker-context/app/
+          cp config.yaml docker-context/app/
+          chmod +x docker-context/app/cyberstrike-ai
           
-          # 在宿主机（原生 x86_64）设置可执行权限，避免 QEMU 模拟 ARM64 时 exit 255
-          chmod +x docker-context/cyberstrike-ai
-          
+          # Dockerfile 里只有 COPY + CMD，没有任何 RUN 指令
+          # 彻底绕过 QEMU 用户态模拟执行 /bin/sh 的 bug
           cat > docker-context/Dockerfile << 'EOF'
-          FROM python:3.12-slim-bookworm
+          FROM debian:bookworm-slim
+          COPY app /app
           WORKDIR /app
-          COPY cyberstrike-ai /app/cyberstrike-ai
-          COPY tools /app/tools
-          COPY roles /app/roles
-          COPY skills /app/skills
-          COPY agents /app/agents
-          COPY web /app/web
-          COPY config.yaml /app/config.yaml
-          RUN mkdir -p /app/data /app/knowledge_base
           EXPOSE 8080 8081
           VOLUME ["/app/data", "/app/knowledge_base"]
           CMD ["/app/cyberstrike-ai"]
