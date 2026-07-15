@@ -19,7 +19,7 @@ jobs:
         with:
           go-version: '1.23'
       
-      - name: Compile ARM64 binary
+      - name: Compile ARM64 binary (native x86_64, no QEMU)
         working-directory: upstream
         run: |
           go env -w GOPROXY=https://proxy.golang.org,direct
@@ -28,44 +28,45 @@ jobs:
           file cyberstrike-ai
           ls -lh cyberstrike-ai
       
-      - name: Prepare Docker context
+      - name: Prepare files on host (zero RUN in Dockerfile)
         run: |
-          mkdir -p docker-context
-          cp upstream/cyberstrike-ai docker-context/
-          # 在宿主机上加执行权限，COPY 会保留
-          chmod +x docker-context/cyberstrike-ai
-          cp -r upstream/tools docker-context/
-          cp -r upstream/roles docker-context/
-          cp -r upstream/skills docker-context/
-          cp -r upstream/agents docker-context/
-          cp -r upstream/web docker-context/
-          cp config.yaml docker-context/
+          # 创建目录结构
+          mkdir -p app/data app/knowledge_base
           
-          # 验证文件存在且有执行权限
-          ls -la docker-context/cyberstrike-ai
+          # 复制二进制并加权限（在 x86_64 原生环境完成，不依赖 QEMU）
+          cp upstream/cyberstrike-ai app/
+          chmod +x app/cyberstrike-ai
           
-          cat > docker-context/Dockerfile << 'EOF'
+          # 复制项目文件
+          cp -r upstream/tools app/
+          cp -r upstream/roles app/
+          cp -r upstream/skills app/
+          cp -r upstream/agents app/
+          cp -r upstream/web app/
+          cp config.yaml app/
+          
+          # 验证
+          echo "=== 目录结构 ==="
+          ls -la app/
+          echo "=== 二进制权限 ==="
+          ls -la app/cyberstrike-ai
+          echo "=== 文件类型 ==="
+          file app/cyberstrike-ai
+      
+      - name: Build ARM64 image (zero RUN instructions, no QEMU crashes)
+        run: |
+          # 生成极简 Dockerfile：只有 COPY 和 CMD，没有 RUN
+          cat > Dockerfile << 'EOF'
           FROM python:3.12-slim-bookworm
+          COPY app /app
           WORKDIR /app
-          RUN apt-get update && apt-get install -y --no-install-recommends \
-              ca-certificates curl nmap sqlmap \
-              && rm -rf /var/lib/apt/lists/*
-          COPY cyberstrike-ai /app/cyberstrike-ai
-          COPY tools /app/tools
-          COPY roles /app/roles
-          COPY skills /app/skills
-          COPY agents /app/agents
-          COPY web /app/web
-          COPY config.yaml /app/config.yaml
-          RUN mkdir -p /app/data /app/knowledge_base
           EXPOSE 8080 8081
           VOLUME ["/app/data", "/app/knowledge_base"]
           CMD ["/app/cyberstrike-ai"]
           EOF
-      
-      - name: Build Docker image
-        run: |
-          docker buildx build --no-cache --platform linux/arm64 -t cyberstrikeai:arm64 --load docker-context/
+          
+          # 构建（COPY 在宿主机执行，不触发 QEMU 模拟容器内命令）
+          docker buildx build --platform linux/arm64 -t cyberstrikeai:arm64 --load .
       
       - name: Save and upload
         run: |
