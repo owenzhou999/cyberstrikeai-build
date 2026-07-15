@@ -1,0 +1,25 @@
+name: Build ARM64 Image
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      
+      - name: Build ARM64 image
+        run: docker buildx build --platform linux/arm64 -t cyberstrikeai:arm64 --load .
+      
+      - name: Save image to tar
+        run: docker save -o cyberstrikeai-arm64.tar cyberstrikeai:arm64
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyberstrikeai-arm64
+          path: cyberstrikeai-arm64.tar
+          retention-days: 1
