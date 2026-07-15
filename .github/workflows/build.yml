@@ -7,18 +7,81 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
+      # 1. 获取你的仓库（里面有 config.yaml）
       - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
       
-      - name: Build ARM64 image
-        run: docker buildx build --platform linux/arm64 -t cyberstrikeai:arm64 --load .
+      # 2. 获取 CyberStrikeAI 官方源码
+      - uses: actions/checkout@v4
+        with:
+          repository: Ed1s0nZ/CyberStrikeAI
+          path: upstream
       
-      - name: Save image to tar
-        run: docker save -o cyberstrikeai-arm64.tar cyberstrikeai:arm64
+      # 3. 安装 Go 环境
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
       
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      # 4. 编译 ARM64 二进制（原生 Linux，日志清晰）
+      - name: Compile ARM64 binary
+        working-directory: upstream
+        run: |
+          go env -w GOPROXY=https://proxy.golang.org,direct
+          go mod download
+          echo "=== 检查入口文件 ==="
+          ls -la cmd/server/
+          echo "=== 开始编译 ==="
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o cyberstrike-ai cmd/server/main.go
+          echo "=== 编译完成 ==="
+          file cyberstrike-ai
+          ls -lh cyberstrike-ai
+      
+      # 5. 准备 Docker 构建文件（自动生成 Dockerfile，不需要你维护）
+      - name: Prepare Docker context
+        run: |
+          mkdir -p build
+          cp upstream/cyberstrike-ai build/
+          cp -r upstream/tools build/
+          cp -r upstream/roles build/
+          cp -r upstream/skills build/
+          cp -r upstream/agents build/
+          cp -r upstream/web build/
+          cp config.yaml build/
+          
+          cat > build/Dockerfile << 'EOF'
+          FROM python:3.12-slim-bookworm
+          WORKDIR /app
+          RUN apt-get update && apt-get install -y --no-install-recommends \
+              ca-certificates curl nmap sqlmap \
+              && rm -rf /var/lib/apt/lists/*
+          COPY cyberstrike-ai /app/cyberstrike-ai
+          COPY tools /app/tools
+          COPY roles /app/roles
+          COPY skills /app/skills
+          COPY agents /app/agents
+          COPY web /app/web
+          COPY config.yaml /app/config.yaml
+          RUN mkdir -p /app/data /app/knowledge_base && chmod +x /app/cyberstrike-ai
+          EXPOSE 8080 8081
+          VOLUME ["/app/data", "/app/knowledge_base"]
+          CMD ["/app/cyberstrike-ai", "--http"]
+          EOF
+      
+      # 6. 构建 ARM64 Docker 镜像
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      
+      - name: Build Docker image
+        run: |
+          docker buildx build --platform linux/arm64 -t cyberstrikeai:arm64 --load build/
+      
+      # 7. 导出 tar 包
+      - name: Save image
+        run: |
+          docker save -o cyberstrikeai-arm64.tar cyberstrikeai:arm64
+          ls -lh cyberstrikeai-arm64.tar
+      
+      # 8. 上传给你下载
+      - uses: actions/upload-artifact@v4
         with:
           name: cyberstrikeai-arm64
           path: cyberstrikeai-arm64.tar
