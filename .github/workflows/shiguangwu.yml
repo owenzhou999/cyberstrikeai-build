@@ -34,6 +34,13 @@ jobs:
           file cyberstrike-ai
           ls -lh cyberstrike-ai
       
+      # ========== 关键：安装 QEMU 和 Buildx（之前缺了这个！）==========
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
       - name: Build Docker image
         run: |
           mkdir -p docker-context
@@ -43,6 +50,9 @@ jobs:
           cp -r upstream/skills docker-context/
           cp -r upstream/agents docker-context/
           cp -r upstream/web docker-context/
+          
+          # 在宿主机创建空目录，避免 Dockerfile 里用 RUN（QEMU 下 RUN 会崩）
+          mkdir -p docker-context/data docker-context/knowledge_base
           
           cat > docker-context/config.yaml << 'EOF'
           auth:
@@ -83,6 +93,7 @@ jobs:
             fact_summary_max_runes: 24000
           EOF
           
+          # Dockerfile 零 RUN 指令，完全避免 QEMU 执行 shell
           cat > docker-context/Dockerfile << 'EOF'
           FROM python:3.12-slim-bookworm
           WORKDIR /app
@@ -93,9 +104,9 @@ jobs:
           COPY agents /app/agents
           COPY web /app/web
           COPY config.yaml /app/config.yaml
-          RUN mkdir -p /app/data /app/knowledge_base
+          COPY data /app/data
+          COPY knowledge_base /app/knowledge_base
           EXPOSE 8080 8081
-          VOLUME ["/app/data", "/app/knowledge_base"]
           CMD ["/app/cyberstrike-ai"]
           EOF
           
