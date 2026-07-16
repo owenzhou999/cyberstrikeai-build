@@ -1,0 +1,112 @@
+name: Build ARM64 for Shiguangwu (v1.6.50-src)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download v1.6.50-src release
+        run: |
+          wget https://github.com/langbyyi/CyberStrikeAI-SRC/archive/refs/tags/v1.6.50-src.tar.gz
+          tar xzf v1.6.50-src.tar.gz
+          mv CyberStrikeAI-SRC-1.6.50-src upstream
+      
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+      
+      - name: Install ARM64 cross compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+      
+      - name: Compile ARM64 binary with CGO
+        working-directory: upstream
+        run: |
+          go env -w GOPROXY=https://goproxy.cn,direct
+          go mod download
+          CC=aarch64-linux-gnu-gcc CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -o cyberstrike-ai cmd/server/main.go
+          file cyberstrike-ai
+          ls -lh cyberstrike-ai
+      
+      - name: Build Docker image
+        run: |
+          mkdir -p docker-context
+          cp upstream/cyberstrike-ai docker-context/
+          cp -r upstream/tools docker-context/
+          cp -r upstream/roles docker-context/
+          cp -r upstream/skills docker-context/
+          cp -r upstream/agents docker-context/
+          cp -r upstream/web docker-context/
+          
+          cat > docker-context/config.yaml << 'EOF'
+          auth:
+            password: "owenzhou999"
+            session_duration_hours: 12
+          server:
+            host: "0.0.0.0"
+            port: 8080
+          log:
+            level: "warn"
+            output: "stdout"
+          mcp:
+            enabled: true
+            host: "0.0.0.0"
+            port: 8081
+            auth_header: "X-MCP-Token"
+            auth_header_value: ""
+          openai:
+            api_key: "sk-qyplwbqwpabwfaxds7qbtvszkp3crxbnhsjrl36y5172q34v"
+            base_url: "https://oneapi.zaiwenai.com/v1"
+            model: "glm-5.2"
+          database:
+            path: "data/conversations.db"
+            knowledge_db_path: "data/knowledge.db"
+          security:
+            tools_dir: "tools"
+          knowledge:
+            enabled: false
+          roles_dir: "roles"
+          skills_dir: "skills"
+          agents_dir: "agents"
+          multi_agent:
+            enabled: false
+            default_mode: "eino_single"
+          project:
+            enabled: true
+            fact_index_max_runes: 65000
+            fact_summary_max_runes: 24000
+          EOF
+          
+          cat > docker-context/Dockerfile << 'EOF'
+          FROM python:3.12-slim-bookworm
+          WORKDIR /app
+          COPY cyberstrike-ai /app/cyberstrike-ai
+          COPY tools /app/tools
+          COPY roles /app/roles
+          COPY skills /app/skills
+          COPY agents /app/agents
+          COPY web /app/web
+          COPY config.yaml /app/config.yaml
+          RUN mkdir -p /app/data /app/knowledge_base && chmod +x /app/cyberstrike-ai
+          EXPOSE 8080 8081
+          VOLUME ["/app/data", "/app/knowledge_base"]
+          CMD ["/app/cyberstrike-ai"]
+          EOF
+          
+          docker buildx build --platform linux/arm64 -t cyberstrikeai:arm64 --load docker-context/
+      
+      - name: Save and upload
+        run: |
+          docker save -o cyberstrikeai-arm64.tar cyberstrikeai:arm64
+          ls -lh cyberstrikeai-arm64.tar
+      
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cyberstrikeai-arm64
+          path: cyberstrikeai-arm64.tar
+          retention-days: 1
